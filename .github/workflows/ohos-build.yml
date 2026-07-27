@@ -1,0 +1,218 @@
+# uv OHOS Build CI
+#
+# Cross-compile uv for HarmonyOS (OHOS) aarch64 from a Windows x86_64 self-hosted runner.
+# Uses the OHOS SDK (LLVM + musl sysroot) for cross-compilation.
+#
+# Branch model:
+#   main          — CI builds: verify each commit cross-compiles, upload Artifacts (30 days)
+#   ohos-release  — same CI; release publishing is handled by ohos-release.yml (tag-triggered)
+#
+# Required runner environment (self-hosted, label `ohos-cross`):
+#   - Windows x86_64
+#   - OHOS SDK at D:\ohos\sdk (LLVM toolchain + musl sysroot) — junction to DevEco native SDK
+#   - Rust stable (1.95.0+) with aarch64-unknown-linux-ohos target installed
+#     (RUSTUP_TOOLCHAIN below overrides the repo's rust-toolchain.toml pin)
+#   - Local proxy at 127.0.0.1:7897 (Clash Verge Rev) for crate fetches
+#
+# Note: uses `cargo build` (debug) for per-commit compile+link verification, not release.
+
+name: OHOS Build
+
+on:
+  push:
+    branches:
+      - main
+      - ohos-release
+    paths:
+      - 'crates/**/*.rs'
+      - 'crates/**/*.py'
+      - 'crates/**/Cargo.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.github/workflows/ohos-build.yml'
+      - 'ohos-windows-toolchain.cmake'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ohos-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OHOS_SDK: D:\ohos\sdk
+  RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-msvc
+  CARGO_INCREMENTAL: 1
+  CARGO_BUILD_JOBS: 4
+  HTTP_PROXY: http://127.0.0.1:7897
+  HTTPS_PROXY: http://127.0.0.1:7897
+
+jobs:
+  build:
+    name: Build uv for OHOS (aarch64)
+    # Security: public repo — never run CI from fork PRs on the self-hosted runner.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, ohos-cross]
+    timeout-minutes: 300
+    permissions:
+      contents: read
+
+    steps:
+      # ============================================================
+      # 1. Source checkout
+      # ============================================================
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ============================================================
+      # 2. Environment
+      # ============================================================
+      - name: Verify runner environment
+        shell: powershell
+        run: |
+          $sdk = $env:OHOS_SDK
+          Write-Host "=== Checking OHOS SDK ==="
+          if (-not (Test-Path "$sdk\llvm\bin\clang.exe")) { throw "clang.exe not found at $sdk\llvm\bin\" }
+          if (-not (Test-Path "$sdk\sysroot")) { throw "sysroot not found at $sdk\sysroot" }
+          Write-Host "OK OHOS SDK: $sdk"
+
+          Write-Host "=== Checking Rust ==="
+          $rustVer = & rustc --version 2>&1; Write-Host $rustVer
+          $cargoVer = & cargo --version 2>&1; Write-Host $cargoVer
+          $targets = & rustc --print target-list 2>&1
+          if ($targets -notcontains "aarch64-unknown-linux-ohos") {
+            throw "aarch64-unknown-linux-ohos target not supported by rustc"
+          }
+          Write-Host "OK Rust target: aarch64-unknown-linux-ohos"
+
+          Write-Host "=== Checking build tools ==="
+          try { $cmakeVer = & cmake --version 2>&1 | Select-Object -First 1; Write-Host $cmakeVer } catch { Write-Host "WARN cmake not in PATH" }
+          try { $ninjaVer = & ninja --version 2>&1; Write-Host $ninjaVer } catch { Write-Host "WARN ninja not in PATH" }
+
+      - name: Setup OHOS cross-compilation environment
+        shell: powershell
+        run: |
+          $sdk = $env:OHOS_SDK -replace '\\','/'
+          $sysroot = "$sdk/sysroot"
+          $llvm = "$sdk/llvm/bin"
+          $target = "aarch64-linux-ohos"
+
+          # Set env vars (override any .cargo/config.toml device paths)
+          "OHOS_SYSROOT=$sysroot" >> $env:GITHUB_ENV
+          "CC_aarch64_unknown_linux_ohos=$llvm/clang.exe" >> $env:GITHUB_ENV
+          "CFLAGS_aarch64_unknown_linux_ohos=--target=$target --sysroot=$sysroot -D__MUSL__" >> $env:GITHUB_ENV
+          "CXX_aarch64_unknown_linux_ohos=$llvm/clang++.exe" >> $env:GITHUB_ENV
+          "CXXFLAGS_aarch64_unknown_linux_ohos=--target=$target --sysroot=$sysroot -D__MUSL__" >> $env:GITHUB_ENV
+          "AR_aarch64_unknown_linux_ohos=$llvm/llvm-ar.exe" >> $env:GITHUB_ENV
+          "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER=$llvm/clang.exe" >> $env:GITHUB_ENV
+          "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_RUSTFLAGS=-C link-arg=--target=$target -C link-arg=--sysroot=$sysroot" >> $env:GITHUB_ENV
+          "AWS_LC_SYS_CMAKE_AR=$llvm/llvm-ar.exe" >> $env:GITHUB_ENV
+          "AWS_LC_SYS_CMAKE_RANLIB=$llvm/llvm-ranlib.exe" >> $env:GITHUB_ENV
+
+          # Windows-compatible cmake toolchain (referenced by aws-lc-rs etc.)
+          "CMAKE_TOOLCHAIN_FILE_aarch64_unknown_linux_ohos=$env:GITHUB_WORKSPACE\ohos-windows-toolchain.cmake" >> $env:GITHUB_ENV
+
+          # CMake generator: must be Ninja (not Visual Studio) for clang cross-compilation
+          "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          "CMAKE_MAKE_PROGRAM=$env:OHOS_SDK\build-tools\cmake\bin\ninja.exe" >> $env:GITHUB_ENV
+
+          # Add OHOS SDK cmake/ninja to PATH
+          "$env:OHOS_SDK\build-tools\cmake\bin" >> $env:GITHUB_PATH
+
+          Write-Host "OK Environment configured"
+          Write-Host "   Sysroot: $sysroot"
+          Write-Host "   LLVM:    $llvm"
+
+      # ============================================================
+      # 3. Caching
+      # ============================================================
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ohos-cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ohos-cargo-registry-
+
+      - name: Cache cargo target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ohos-cargo-target-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ohos-cargo-target-
+
+      # ============================================================
+      # 4. Build (debug, for per-commit compile+link verification)
+      # ============================================================
+      - name: Build uv
+        shell: powershell
+        run: |
+          # If a device-native .cargo/config.toml exists, move it aside: its
+          # [target.aarch64-unknown-linux-ohos] rustflags carry OHOS device paths that
+          # would merge with (not replace) the CI env vars set above.
+          $configPath = Join-Path (Join-Path $env:GITHUB_WORKSPACE ".cargo") "config.toml"
+          $configBak  = Join-Path (Join-Path $env:GITHUB_WORKSPACE ".cargo") "config.toml.ci-bak"
+          if (Test-Path $configPath) {
+            Move-Item -Force $configPath $configBak
+            Write-Host "Moved config.toml aside to avoid device path conflicts"
+          }
+          try {
+            & cargo build --target aarch64-unknown-linux-ohos -p uv
+            if ($LASTEXITCODE -ne 0) { throw "cargo build failed with exit code $LASTEXITCODE" }
+          } finally {
+            if (Test-Path $configBak) {
+              Move-Item -Force $configBak $configPath
+              Write-Host "Restored config.toml"
+            }
+          }
+
+      # ============================================================
+      # 5. Verify binary (ELF is AArch64 OHOS, musl-linked)
+      # ============================================================
+      - name: Verify binary
+        shell: powershell
+        run: |
+          $bin = "target/aarch64-unknown-linux-ohos/debug/uv"
+          $sdk = $env:OHOS_SDK
+          $readelf = "$sdk\llvm\bin\llvm-readelf.exe"
+
+          Write-Host "=== File info ==="
+          Get-Item $bin | Select-Object Name, Length, LastWriteTime | Format-List
+
+          Write-Host "=== ELF header ==="
+          $header = & $readelf -h $bin 2>&1
+          $header | Select-String "Class|Machine|OS/ABI"
+          if (-not ($header | Select-String "AArch64")) { throw "Not an AArch64 ELF binary" }
+          Write-Host "OK Valid AArch64 ELF"
+
+          Write-Host ""
+          Write-Host "=== Dynamic dependencies ==="
+          $dynamic = & $readelf -d $bin 2>&1
+          $needed = $dynamic | Select-String "NEEDED" | ForEach-Object { $_ -replace '.*\[(.*)\].*','$1' }
+          Write-Host "NEEDED: $needed"
+          foreach ($lib in $needed) {
+            if ($lib -eq "libc.so") {
+              Write-Host "OK Expected: $lib"
+            } else {
+              $dynamic | Select-String "NEEDED"
+              throw "Unexpected dynamic dependency: $lib"
+            }
+          }
+          Write-Host "OK Binary validation passed"
+
+      # ============================================================
+      # 6. Upload artifact (raw binary, 30-day retention)
+      # ============================================================
+      - name: Upload artifact (raw binary)
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: uv-ohos-aarch64-${{ github.sha }}
+          path: target/aarch64-unknown-linux-ohos/debug/uv
+          retention-days: 30
