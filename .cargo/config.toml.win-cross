@@ -1,0 +1,36 @@
+[alias]
+dev = "run --package uv-dev --features dev"
+
+# statically link the C runtime so the executable does not depend on
+# that shared/dynamic library.
+#
+# See: https://github.com/astral-sh/ruff/issues/11503
+[target.'cfg(all(target_env = "msvc", target_os = "windows"))']
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# OHOS (OpenHarmony) cross-compilation
+[target.aarch64-unknown-linux-ohos]
+linker = "C:/ohos/sdk/llvm/bin/clang.exe"
+ar = "C:/ohos/sdk/llvm/bin/llvm-ar.exe"
+rustflags = ["-C", "link-arg=--target=aarch64-linux-ohos", "-C", "link-arg=--sysroot=C:/ohos/sdk/sysroot"]
+
+# Use Chinese mirror for crates.io
+[source.crates-io]
+replace-with = 'ustc'
+
+[source.ustc]
+registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
+
+[env]
+OHOS_SYSROOT = "C:/ohos/sdk/sysroot"
+CC_aarch64_unknown_linux_ohos = "C:/ohos/sdk/llvm/bin/clang.exe"
+CFLAGS_aarch64_unknown_linux_ohos = "--target=aarch64-linux-ohos --sysroot=C:/ohos/sdk/sysroot -D__MUSL__"
+CXX_aarch64_unknown_linux_ohos = "C:/ohos/sdk/llvm/bin/clang++.exe"
+CXXFLAGS_aarch64_unknown_linux_ohos = "--target=aarch64-linux-ohos --sysroot=C:/ohos/sdk/sysroot -D__MUSL__"
+AR_aarch64_unknown_linux_ohos = "C:/ohos/sdk/llvm/bin/llvm-ar.exe"
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER = "C:/ohos/sdk/llvm/bin/clang.exe"
+CMAKE_aarch64_unknown_linux_ohos = { value = "cmake-wrapper.bat", relative = true }
+CMAKE_GENERATOR_aarch64_unknown_linux_ohos = "Ninja"
+CMAKE_MAKE_PROGRAM_aarch64_unknown_linux_ohos = "C:/ohos/sdk/build-tools/cmake/bin/ninja.exe"
+CMAKE_TOOLCHAIN_FILE_aarch64_unknown_linux_ohos = { value = "ohos-toolchain.cmake", relative = true }
+PATH = { value = "C:/ohos/sdk/build-tools/cmake/bin", prepend = true }

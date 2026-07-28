@@ -1,0 +1,23 @@
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+
+set(OHOS_SDK "C:/ohos/sdk")
+
+set(CMAKE_C_COMPILER "${OHOS_SDK}/llvm/bin/clang.exe")
+set(CMAKE_CXX_COMPILER "${OHOS_SDK}/llvm/bin/clang++.exe")
+set(CMAKE_AR "${OHOS_SDK}/llvm/bin/llvm-ar.exe" CACHE FILEPATH "ar" FORCE)
+set(CMAKE_RANLIB "${OHOS_SDK}/llvm/bin/llvm-ranlib.exe" CACHE FILEPATH "ranlib" FORCE)
+
+set(CMAKE_C_COMPILER_TARGET "aarch64-linux-ohos")
+set(CMAKE_CXX_COMPILER_TARGET "aarch64-linux-ohos")
+
+set(CMAKE_SYSROOT "${OHOS_SDK}/sysroot")
+
+set(CMAKE_MAKE_PROGRAM "${OHOS_SDK}/build-tools/cmake/bin/ninja.exe" CACHE FILEPATH "ninja" FORCE)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__MUSL__" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D__MUSL__" CACHE STRING "" FORCE)
+
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
