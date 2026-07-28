@@ -628,6 +628,9 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                 .collect::<Vec<_>>();
             // Non-musllinux is given lowest priority.
             platform_tags.push(PlatformTag::Linux { arch });
+            // OHOS uses musl libc on aarch64; wheels built on OHOS carry the
+            // `ohos_<arch>` platform tag. Accept them as compatible.
+            platform_tags.push(PlatformTag::Ohos { arch });
             platform_tags
         }
         (Os::Macos { major, minor }, Arch::X86_64) => {
