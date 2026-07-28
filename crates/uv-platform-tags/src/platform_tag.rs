@@ -78,6 +78,8 @@ pub enum PlatformTag {
     Manylinux2014 { arch: Arch },
     /// Ex) `linux_x86_64`
     Linux { arch: Arch },
+    /// Ex) `ohos_aarch64`
+    Ohos { arch: Arch },
     /// Ex) `musllinux_1_2_x86_64`
     Musllinux { major: u16, minor: u16, arch: Arch },
     /// Ex) `macosx_11_0_x86_64`
@@ -135,6 +137,7 @@ impl PlatformTag {
             Self::Manylinux2010 { .. } => Some("Linux"),
             Self::Manylinux2014 { .. } => Some("Linux"),
             Self::Linux { .. } => Some("Linux"),
+            Self::Ohos { .. } => Some("OHOS"),
             Self::Musllinux { .. } => Some("Linux"),
             Self::Macos { .. } => Some("macOS"),
             Self::Win32 => Some("Windows"),
@@ -447,6 +450,7 @@ impl std::fmt::Display for PlatformTag {
             Self::Manylinux2010 { arch } => write!(f, "manylinux2010_{arch}"),
             Self::Manylinux2014 { arch } => write!(f, "manylinux2014_{arch}"),
             Self::Linux { arch } => write!(f, "linux_{arch}"),
+            Self::Ohos { arch } => write!(f, "ohos_{arch}"),
             Self::Musllinux { major, minor, arch } => {
                 write!(f, "musllinux_{major}_{minor}_{arch}")
             }
@@ -585,6 +589,17 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 })?;
             return Ok(Self::Linux { arch });
+        }
+
+        if let Some(rest) = s.strip_prefix("ohos_") {
+            // Ex) ohos_aarch64
+            let arch = rest
+                .parse()
+                .map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "ohos",
+                    tag: s.to_string(),
+                })?;
+            return Ok(Self::Ohos { arch });
         }
 
         if let Some(rest) = s.strip_prefix("musllinux_") {
