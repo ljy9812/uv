@@ -241,7 +241,8 @@ install_binary() {
             # 用 && / || 承载，避免 set -e 在签名失败时提前退出脚本
             "$SIGN_TOOL" sign -selfSign 1 -inFile "$bin" -outFile "${bin}.signed" 2>/dev/null && sign_rc=0 || sign_rc=$?
             if [ -s "${bin}.signed" ]; then
-                mv -f "${bin}.signed" "$bin" && ok "$name 签名完成" || warn "$name 签名后替换失败"
+                # binary-sign-tool 重写文件会丢执行位，mv 覆盖后必须重新 chmod +x
+                mv -f "${bin}.signed" "$bin" && chmod +x "$bin" && ok "$name 签名完成" || warn "$name 签名后处理失败"
             else
                 rm -f "${bin}.signed"
                 warn "$name 签名失败 (rc=$sign_rc)，尝试继续..."
