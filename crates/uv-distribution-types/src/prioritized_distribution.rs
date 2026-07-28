@@ -896,7 +896,8 @@ fn implied_platform_markers(filename: &WheelFilename) -> MarkerTree {
             | PlatformTag::Manylinux2010 { arch, .. }
             | PlatformTag::Manylinux2014 { arch, .. }
             | PlatformTag::Musllinux { arch, .. }
-            | PlatformTag::Linux { arch } => {
+            | PlatformTag::Linux { arch }
+            | PlatformTag::Ohos { arch } => {
                 let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::SysPlatform,
                     operator: MarkerOperator::Equal,
