@@ -24,7 +24,6 @@ use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
 use serde::{Deserialize, Deserializer};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
-use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_auth::CredentialsCache;
@@ -175,6 +174,28 @@ struct Pep517Backend {
     backend_path: Option<BackendPath>,
 }
 
+/// Platform compatibility stub for OHOS (OpenHarmony).
+///
+/// On OHOS, `sysconfig.get_platform()` returns an identifier containing
+/// `"harmonyos"`, which build backends like setuptools do not recognise. This
+/// stub monkey-patches it to return `"linux"` instead. A no-op on non-OHOS.
+#[cfg(target_env = "ohos")]
+const OHOS_PLATFORM_STUB: &str = "\
+import sysconfig as _sysconfig
+_orig_get_platform = _sysconfig.get_platform
+def _patched_get_platform():
+    return _orig_get_platform().replace('harmonyos', 'linux')
+_sysconfig.get_platform = _patched_get_platform
+try:
+    import distutils.util
+    distutils.util.get_platform = _patched_get_platform
+except (ImportError, ModuleNotFoundError):
+    pass
+";
+
+#[cfg(not(target_env = "ohos"))]
+const OHOS_PLATFORM_STUB: &str = "";
+
 impl Pep517Backend {
     fn backend_import(&self) -> String {
         let import = if let Some((path, object)) = self.backend.split_once(':') {
@@ -207,7 +228,7 @@ impl Pep517Backend {
 
             sys.path = [{backend_path}] + sys.path
 
-            {import}
+            {OHOS_PLATFORM_STUB}{import}
         "#, backend_path = backend_path_encoded}
     }
 
@@ -1234,7 +1255,7 @@ impl PythonRunner {
 
         let _permit = self.concurrent_build_slots.acquire().await.unwrap();
 
-        let mut child = Command::new(venv.python_executable())
+        let mut child = uv_python::Interpreter::python_command_tokio(venv.python_executable())
             .args(["-c", script])
             .current_dir(source_tree.simplified())
             .envs(environment_variables)
