@@ -208,7 +208,9 @@ install_binary() {
 
     info "设置可执行权限..."
     chmod +x "$target_path"
-    [ -f "$uvx_target_path" ] && chmod +x "$uvx_target_path"
+    if [ -f "$uvx_target_path" ]; then
+        chmod +x "$uvx_target_path"
+    fi
 
     # OHOS/HarmonyOS ELF 签名：部分设备需要签名后才能执行
     SIGN_TOOL=""
@@ -266,18 +268,25 @@ setup_path() {
     NEED_UV_PYTHON=true
 
     if [ -f "$ZSHRC" ]; then
-        grep -qF "PATH=\"${INSTALL_DIR}" "$ZSHRC" && NEED_PATH=false
-        grep -qF "UV_PYTHON_INSTALL_DIR" "$ZSHRC" && NEED_UV_PYTHON=false
+        if grep -qF "PATH=\"${INSTALL_DIR}" "$ZSHRC"; then NEED_PATH=false; fi
+        if grep -qF "UV_PYTHON_INSTALL_DIR" "$ZSHRC"; then NEED_UV_PYTHON=false; fi
     fi
 
     if [ "$NEED_PATH" = true ] || [ "$NEED_UV_PYTHON" = true ]; then
         info "配置 ~/.zshrc ..."
+        # 只把真正的 export 行写入 .zshrc；ok/info 的彩色提示走终端，避免污染 rc 文件
         {
             echo ""
             echo "$COMMENT_LINE"
-            [ "$NEED_PATH" = true ] && echo "$PATH_LINE" && ok "PATH 已添加"
-            [ "$NEED_UV_PYTHON" = true ] && echo "$UV_PYTHON_LINE" && ok "UV_PYTHON_INSTALL_DIR 已添加"
+            if [ "$NEED_PATH" = true ]; then
+                echo "$PATH_LINE"
+            fi
+            if [ "$NEED_UV_PYTHON" = true ]; then
+                echo "$UV_PYTHON_LINE"
+            fi
         } >> "$ZSHRC"
+        if [ "$NEED_PATH" = true ]; then ok "PATH 已添加"; fi
+        if [ "$NEED_UV_PYTHON" = true ]; then ok "UV_PYTHON_INSTALL_DIR 已添加"; fi
     else
         info "PATH 和 UV_PYTHON_INSTALL_DIR 已配置在 $ZSHRC，跳过"
     fi
