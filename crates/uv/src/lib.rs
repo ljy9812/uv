@@ -3011,6 +3011,31 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
+    // On OHOS (OpenHarmony), the root filesystem is read-only, so `$HOME`
+    // (typically `/root`) cannot be used for cache or data storage. Redirect
+    // `HOME` to the directory containing the uv executable, so XDG-based default
+    // paths resolve to writable locations.
+    #[cfg(target_env = "ohos")]
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            // SAFETY: Called early in main() before spawning any threads.
+            unsafe {
+                std::env::set_var(EnvVars::HOME, parent);
+            }
+        }
+    }
+
+    // On OHOS, libc detection via filesystem inspection can fail in sandboxed
+    // environments. Since OHOS always uses musl, set `UV_LIBC=musl` to bypass
+    // filesystem-based detection. Only set if not already configured by the user.
+    #[cfg(target_env = "ohos")]
+    if std::env::var_os(EnvVars::UV_LIBC).is_none() {
+        // SAFETY: Called early in main() before spawning any threads.
+        unsafe {
+            std::env::set_var(EnvVars::UV_LIBC, "musl");
+        }
+    }
+
     #[cfg(windows)]
     uv_windows::install_unhandled_exception_handler();
 
