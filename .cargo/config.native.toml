@@ -1,18 +1,6 @@
 [alias]
 dev = "run --package uv-dev --features dev"
 
-# statically link the C runtime so the executable does not depend on
-# that shared/dynamic library.
-#
-# See: https://github.com/astral-sh/ruff/issues/11503
-[target.'cfg(all(target_env = "msvc", target_os = "windows"))']
-rustflags = ["-C", "target-feature=+crt-static"]
-
-# OHOS (OpenHarmony) native compilation
-[target.aarch64-unknown-linux-ohos]
-linker = "/data/service/hnp/bin/clang"
-rustflags = ["-C", "link-arg=--target=aarch64-linux-ohos", "-C", "link-arg=--sysroot=/data/service/hnp/ohos-sdk.org/ohos-sdk_26.0.0.18/ohos/native/sysroot"]
-
 # Use Chinese mirror for crates.io
 [source.crates-io]
 replace-with = 'ustc'
@@ -20,8 +8,13 @@ replace-with = 'ustc'
 [source.ustc]
 registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
 
+# OHOS (OpenHarmony) native compilation on device
+[target.aarch64-unknown-linux-ohos]
+linker = "/data/service/hnp/bin/clang"
+ar = "/data/service/hnp/bin/llvm-ar"
+rustflags = ["-C", "link-arg=--target=aarch64-linux-ohos", "-C", "link-arg=--sysroot=/data/service/hnp/ohos-sdk.org/ohos-sdk_26.0.0.18/ohos/native/sysroot"]
+
 [env]
-# OHOS native compilation - use local OHOS SDK tools
 OHOS_SYSROOT = "/data/service/hnp/ohos-sdk.org/ohos-sdk_26.0.0.18/ohos/native/sysroot"
 CC_aarch64_unknown_linux_ohos = "/data/service/hnp/bin/clang"
 CFLAGS_aarch64_unknown_linux_ohos = "--target=aarch64-linux-ohos --sysroot=/data/service/hnp/ohos-sdk.org/ohos-sdk_26.0.0.18/ohos/native/sysroot -D__MUSL__"
@@ -29,10 +22,8 @@ CXX_aarch64_unknown_linux_ohos = "/data/service/hnp/bin/clang++"
 CXXFLAGS_aarch64_unknown_linux_ohos = "--target=aarch64-linux-ohos --sysroot=/data/service/hnp/ohos-sdk.org/ohos-sdk_26.0.0.18/ohos/native/sysroot -D__MUSL__"
 AR_aarch64_unknown_linux_ohos = "/data/service/hnp/bin/llvm-ar"
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER = "/data/service/hnp/bin/clang"
-OHOS_SDK_NATIVE = "/data/service/hnp/ohos-sdk.org/ohos-sdk_26.0.0.18/ohos/native"
+CMAKE_aarch64_unknown_linux_ohos = "/data/service/hnp/bin/cmake"
+CMAKE_GENERATOR_aarch64_unknown_linux_ohos = "Ninja"
+CMAKE_MAKE_PROGRAM_aarch64_unknown_linux_ohos = "/data/service/hnp/bin/ninja"
 CMAKE_TOOLCHAIN_FILE_aarch64_unknown_linux_ohos = { value = "ohos-native-toolchain.cmake", relative = true }
-AWS_LC_SYS_CMAKE_AR = "/data/service/hnp/bin/llvm-ar"
-AWS_LC_SYS_CMAKE_RANLIB = "/data/service/hnp/bin/llvm-ranlib"
-AR = "/data/service/hnp/bin/llvm-ar"
-RANLIB = "/data/service/hnp/bin/llvm-ranlib"
-CMAKE_GENERATOR = "Ninja"
+PATH = { value = "/data/service/hnp/bin", prepend = true }
