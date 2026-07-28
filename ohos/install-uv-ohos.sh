@@ -232,10 +232,21 @@ install_binary() {
 
     if [ -n "$SIGN_TOOL" ]; then
         info "使用签名工具: $SIGN_TOOL"
-        "$SIGN_TOOL" "$target_path" 2>/dev/null && ok "uv 签名完成" || warn "uv 签名失败，尝试继续..."
-        if [ -f "$uvx_target_path" ]; then
-            "$SIGN_TOOL" "$uvx_target_path" 2>/dev/null && ok "uvx 签名完成" || warn "uvx 签名失败，尝试继续..."
-        fi
+        # binary-sign-tool 需要完整参数 `sign -selfSign 1 -inFile <in> -outFile <out>`；
+        # 直接传单个路径会被当成未知命令（COMMAND_ERROR -101 "... is not trust command"）。
+        # 签到临时文件再覆盖原文件（in-place 同路径未验证可靠），以 .signed 文件落地判定成功。
+        for bin in "$target_path" "$uvx_target_path"; do
+            [ -f "$bin" ] || continue
+            name=$(basename "$bin")
+            # 用 && / || 承载，避免 set -e 在签名失败时提前退出脚本
+            "$SIGN_TOOL" sign -selfSign 1 -inFile "$bin" -outFile "${bin}.signed" 2>/dev/null && sign_rc=0 || sign_rc=$?
+            if [ -s "${bin}.signed" ]; then
+                mv -f "${bin}.signed" "$bin" && ok "$name 签名完成" || warn "$name 签名后替换失败"
+            else
+                rm -f "${bin}.signed"
+                warn "$name 签名失败 (rc=$sign_rc)，尝试继续..."
+            fi
+        done
     fi
 
     # 首次运行确认（OHOS ELF 签名机制可能需要）
@@ -246,7 +257,7 @@ install_binary() {
         fail "OHOS 需要对 ELF 二进制进行签名后才能执行。"
         fail "如果你已安装 Rust 工具链，请运行："
         fail ""
-        fail "  \$OHOS_BINARY_SIGN_TOOL $target_path"
+        fail "  \$OHOS_BINARY_SIGN_TOOL sign -selfSign 1 -inFile $target_path -outFile $target_path.signed && mv $target_path.signed $target_path"
         fail ""
         fail "或查找签名工具："
         fail "  find \$HOME/usr -name binary-sign-tool"
