@@ -1,0 +1,265 @@
+# OHOS Release Workflow
+#
+# Triggered by pushing tags matching `ohos-v*` (e.g., ohos-v0.1.0).
+# Builds the OHOS binary and creates a GitHub Release with the artifact.
+
+name: OHOS Release
+
+on:
+  push:
+    tags:
+      - 'ohos-v*'
+
+env:
+  OHOS_SDK: D:\ohos\sdk
+  RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-msvc
+  CARGO_INCREMENTAL: 1
+  CARGO_BUILD_JOBS: 4
+  HTTP_PROXY: http://127.0.0.1:7897
+  HTTPS_PROXY: http://127.0.0.1:7897
+
+jobs:
+  release:
+    name: Build and Release OHOS binary
+    runs-on: [self-hosted, ohos-cross]
+    timeout-minutes: 300
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Verify runner environment
+        shell: powershell
+        run: |
+          $sdk = $env:OHOS_SDK
+          Write-Host "=== Checking OHOS SDK ==="
+          if (-not (Test-Path "$sdk\llvm\bin\clang.exe")) { throw "clang.exe not found at $sdk\llvm\bin\" }
+          if (-not (Test-Path "$sdk\sysroot")) { throw "sysroot not found at $sdk\sysroot" }
+          Write-Host "OK OHOS SDK: $sdk"
+
+          Write-Host "=== Checking Rust ==="
+          $rustVer = & rustc --version 2>&1; Write-Host $rustVer
+          $targets = & rustc --print target-list 2>&1
+          if ($targets -notcontains "aarch64-unknown-linux-ohos") {
+            throw "aarch64-unknown-linux-ohos target not supported"
+          }
+          Write-Host "OK Rust target: aarch64-unknown-linux-ohos"
+
+      - name: Setup OHOS cross-compilation environment
+        shell: powershell
+        run: |
+          $sdk = $env:OHOS_SDK -replace '\\','/'
+          $sysroot = "$sdk/sysroot"
+          $llvm = "$sdk/llvm/bin"
+          $target = "aarch64-linux-ohos"
+
+          "OHOS_SYSROOT=$sysroot" >> $env:GITHUB_ENV
+          "CC_aarch64_unknown_linux_ohos=$llvm/clang.exe" >> $env:GITHUB_ENV
+          "CFLAGS_aarch64_unknown_linux_ohos=--target=$target --sysroot=$sysroot -D__MUSL__" >> $env:GITHUB_ENV
+          "CXX_aarch64_unknown_linux_ohos=$llvm/clang++.exe" >> $env:GITHUB_ENV
+          "CXXFLAGS_aarch64_unknown_linux_ohos=--target=$target --sysroot=$sysroot -D__MUSL__" >> $env:GITHUB_ENV
+          "AR_aarch64_unknown_linux_ohos=$llvm/llvm-ar.exe" >> $env:GITHUB_ENV
+          "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_LINKER=$llvm/clang.exe" >> $env:GITHUB_ENV
+          "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_OHOS_RUSTFLAGS=-C link-arg=--target=$target -C link-arg=--sysroot=$sysroot" >> $env:GITHUB_ENV
+          "AWS_LC_SYS_CMAKE_AR=$llvm/llvm-ar.exe" >> $env:GITHUB_ENV
+          "AWS_LC_SYS_CMAKE_RANLIB=$llvm/llvm-ranlib.exe" >> $env:GITHUB_ENV
+          "CMAKE_TOOLCHAIN_FILE_aarch64_unknown_linux_ohos=$env:GITHUB_WORKSPACE\ohos-windows-toolchain.cmake" >> $env:GITHUB_ENV
+          "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          "CMAKE_MAKE_PROGRAM=$env:OHOS_SDK\build-tools\cmake\bin\ninja.exe" >> $env:GITHUB_ENV
+          "$env:OHOS_SDK\build-tools\cmake\bin" >> $env:GITHUB_PATH
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ohos-cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ohos-cargo-registry-
+
+      - name: Cache cargo target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ohos-cargo-target-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ohos-cargo-target-
+
+      - name: Build uv
+        shell: powershell
+        run: |
+          $configPath = Join-Path (Join-Path $env:GITHUB_WORKSPACE ".cargo") "config.toml"
+          $configBak  = Join-Path (Join-Path $env:GITHUB_WORKSPACE ".cargo") "config.toml.ci-bak"
+          if (Test-Path $configPath) {
+            Move-Item -Force $configPath $configBak
+            Write-Host "Moved config.toml aside"
+          }
+          try {
+            & cargo build --release --target aarch64-unknown-linux-ohos -p uv
+            if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
+          } finally {
+            if (Test-Path $configBak) {
+              Move-Item -Force $configBak $configPath
+            }
+          }
+
+      - name: Verify binary
+        shell: powershell
+        run: |
+          $readelf = "$env:OHOS_SDK\llvm\bin\llvm-readelf.exe"
+          foreach ($bin in @("target/aarch64-unknown-linux-ohos/release/uv", "target/aarch64-unknown-linux-ohos/release/uvx")) {
+            if (-not (Test-Path $bin)) {
+              Write-Host "WARN $bin not found, skipping"
+              continue
+            }
+            $header = & $readelf -h $bin 2>&1
+            if (-not ($header | Select-String "AArch64")) { throw "$bin is not an AArch64 ELF binary" }
+            Write-Host "OK Valid AArch64 ELF: $bin"
+          }
+
+      - name: Sign binary
+        shell: powershell
+        run: |
+          $sdk = $env:OHOS_SDK
+
+          Write-Host "=== OHOS ELF Code Signing ==="
+
+          # Search for binary-sign-tool.jar
+          $signTool = $null
+          $searchPaths = @(
+            "$sdk\..\..\toolchains\lib\binary-sign-tool.jar",
+            "C:\Program Files\Huawei\DevEco Studio\sdk\toolchains\lib\binary-sign-tool.jar"
+          )
+          foreach ($p in $searchPaths) {
+            if (Test-Path $p) { $signTool = $p; break }
+          }
+          if (-not $signTool) {
+            $found = Get-ChildItem -Path "C:\Program Files\Huawei" -Recurse -Filter "binary-sign-tool.jar" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $signTool = $found.FullName }
+          }
+
+          if (-not $signTool) {
+            Write-Host "WARN binary-sign-tool.jar not found, skipping signing"
+            return
+          }
+          Write-Host "Sign tool: $signTool"
+
+          $keystore = Join-Path $env:GITHUB_WORKSPACE "ohos\signing\ohos-self-sign.p12"
+          if (-not (Test-Path $keystore)) {
+            Write-Host "WARN Keystore not found: $keystore, skipping signing"
+            return
+          }
+
+          foreach ($bin in @("target/aarch64-unknown-linux-ohos/release/uv", "target/aarch64-unknown-linux-ohos/release/uvx")) {
+            if (-not (Test-Path $bin)) {
+              Write-Host "WARN $bin not found, skipping"
+              continue
+            }
+            $outBin = "$bin.signed"
+            & java -jar $signTool sign `
+              -mode localSign `
+              -keyAlias ohos-key `
+              -inFile $bin `
+              -signAlg SHA256withECDSA `
+              -keystoreFile $keystore `
+              -keystorePwd ohos123456 `
+              -keyPwd ohos123456 `
+              -selfSign 1 `
+              -outFile $outBin
+
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "WARN Signing $bin failed, using unsigned binary"
+              continue
+            }
+
+            Move-Item -Force $outBin $bin
+            Write-Host "OK Signed: $bin"
+          }
+
+      - name: Package release
+        id: package
+        shell: powershell
+        run: |
+          $uvBin = "target/aarch64-unknown-linux-ohos/release/uv"
+          $uvxBin = "target/aarch64-unknown-linux-ohos/release/uvx"
+          $tag = "${{ github.ref_name }}"
+          $name = "uv-ohos-aarch64-$tag"
+          $releaseDir = "$env:TEMP\uv-release"
+          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+
+          # Raw binaries for install script
+          Copy-Item $uvBin "$releaseDir\uv-ohos-aarch64"
+          if (Test-Path $uvxBin) {
+            Copy-Item $uvxBin "$releaseDir\uvx-ohos-aarch64"
+          }
+
+          # Versioned tar.gz for archive
+          $archiveDir = "$releaseDir\$name"
+          New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
+          Copy-Item $uvBin "$archiveDir\uv"
+          if (Test-Path $uvxBin) {
+            Copy-Item $uvxBin "$archiveDir\uvx"
+          }
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE "ohos\install-uv-ohos.sh") "$archiveDir\install-uv-ohos.sh"
+          Set-Location $releaseDir
+          & tar czf "$name.tar.gz" $name
+
+          # Standalone install script
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE "ohos\install-uv-ohos.sh") "$releaseDir\install-uv-ohos.sh"
+
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "binary_path=$releaseDir\uv-ohos-aarch64" >> $env:GITHUB_OUTPUT
+          "uvx_binary_path=$releaseDir\uvx-ohos-aarch64" >> $env:GITHUB_OUTPUT
+          "archive_path=$releaseDir\$name.tar.gz" >> $env:GITHUB_OUTPUT
+          "script_path=$releaseDir\install-uv-ohos.sh" >> $env:GITHUB_OUTPUT
+          Write-Host "OK Packaged: uv + uvx + $name.tar.gz"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.package.outputs.binary_path }}
+            ${{ steps.package.outputs.uvx_binary_path }}
+            ${{ steps.package.outputs.archive_path }}
+            ${{ steps.package.outputs.script_path }}
+          generate_release_notes: true
+          name: "uv OHOS ${{ github.ref_name }}"
+          body: |
+            ## uv for HarmonyOS (OHOS) aarch64
+
+            Cross-compiled binary for OpenHarmony/HarmonyOS NEXT.
+
+            ### Quick Install
+
+            ```bash
+            curl -fsSL https://ghfast.top/https://github.com/ljy9812/uv/releases/download/ohos-latest/install-uv-ohos.sh | sh
+            ```
+
+      - name: Update ohos-latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ohos-latest
+          name: "uv OHOS (Latest)"
+          files: |
+            ${{ steps.package.outputs.binary_path }}
+            ${{ steps.package.outputs.uvx_binary_path }}
+            ${{ steps.package.outputs.archive_path }}
+            ${{ steps.package.outputs.script_path }}
+          body: |
+            ## Latest uv for HarmonyOS (OHOS) aarch64
+
+            This release is automatically updated with the latest build.
+
+            ### Quick Install
+
+            ```bash
+            curl -fsSL https://ghfast.top/https://github.com/ljy9812/uv/releases/download/ohos-latest/install-uv-ohos.sh | sh
+            ```
+
+            ### Version
+
+            Built from: ${{ github.ref_name }} (${{ github.sha }})
