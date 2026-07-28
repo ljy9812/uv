@@ -104,9 +104,11 @@ class TestRunner:
         self.e1_passed = False
 
         # 环境变量
+        # NOTE: UV_PYTHON_INSTALL_MIRROR removed — uv 0.11.31 rejects the
+        # ghfast-wrapped URL format ("URL does not match the expected format").
+        # uv now uses the built-in download-metadata.json for Python downloads.
         self.env = {
             "UV_INDEX_URL": UV_INDEX_URL,
-            "UV_PYTHON_INSTALL_MIRROR": UV_PYTHON_INSTALL_MIRROR,
         }
 
     def uv(self, args: str) -> tuple[int, str, float]:
@@ -319,7 +321,7 @@ class TestRunner:
                 self.skip_deps(tid, name, "B2 失败，跳过 C 组")
             return
 
-        venv_path = "/tmp/testvenv"
+        venv_path = "/data/local/tmp/testvenv"
         venv_python = f"{venv_path}/bin/python"
 
         # C1: 创建虚拟环境
@@ -346,22 +348,22 @@ class TestRunner:
             return
 
         # C10: venv --seed
-        code, out, dur = self.uv(f"venv --seed /tmp/testvenv_seed")
+        code, out, dur = self.uv(f"venv --seed /data/local/tmp/testvenv_seed")
         ok = code == 0
         self.record("C10", "venv --seed", Status.PASS if ok else Status.FAIL,
-                     f"uv venv --seed /tmp/testvenv_seed", out, dur)
+                     f"uv venv --seed /data/local/tmp/testvenv_seed", out, dur)
 
         # C11: 验证 seed 安装
-        code, out, dur = self.uv(f"pip list --python /tmp/testvenv_seed/bin/python")
+        code, out, dur = self.uv(f"pip list --python /data/local/tmp/testvenv_seed/bin/python")
         ok = code == 0 and "pip" in out.lower()
         self.record("C11", "验证 seed 安装", Status.PASS if ok else Status.FAIL,
                      f"uv pip list --python .../testvenv_seed/bin/python", out, dur)
 
         # C12: venv --python 3.12
-        code, out, dur = self.uv(f"venv --python 3.12 /tmp/testvenv_py")
+        code, out, dur = self.uv(f"venv --python 3.12 /data/local/tmp/testvenv_py")
         ok = code == 0
         self.record("C12", "venv --python 3.12", Status.PASS if ok else Status.FAIL,
-                     f"uv venv --python 3.12 /tmp/testvenv_py", out, dur)
+                     f"uv venv --python 3.12 /data/local/tmp/testvenv_py", out, dur)
 
         # C13: venv --clear
         code, out, dur = self.uv(f"venv --clear {venv_path}")
@@ -376,22 +378,22 @@ class TestRunner:
                      f"uv venv --allow-existing {venv_path}", out, dur)
 
         # C15: venv --no-project
-        code, out, dur = self.uv(f"venv --no-project /tmp/testvenv2")
+        code, out, dur = self.uv(f"venv --no-project /data/local/tmp/testvenv2")
         ok = code == 0
         self.record("C15", "venv --no-project", Status.PASS if ok else Status.FAIL,
-                     f"uv venv --no-project /tmp/testvenv2", out, dur)
+                     f"uv venv --no-project /data/local/tmp/testvenv2", out, dur)
 
         # C16: venv --system-site-packages
-        code, out, dur = self.uv(f"venv --system-site-packages /tmp/testvenv_sys")
+        code, out, dur = self.uv(f"venv --system-site-packages /data/local/tmp/testvenv_sys")
         ok = code == 0
         self.record("C16", "venv --system-site-packages", Status.PASS if ok else Status.FAIL,
-                     f"uv venv --system-site-packages /tmp/testvenv_sys", out, dur)
+                     f"uv venv --system-site-packages /data/local/tmp/testvenv_sys", out, dur)
 
         # C17: venv --prompt
-        code, out, dur = self.uv(f"venv --prompt myenv /tmp/testvenv_prompt")
+        code, out, dur = self.uv(f"venv --prompt myenv /data/local/tmp/testvenv_prompt")
         ok = code == 0
         self.record("C17", "venv --prompt", Status.PASS if ok else Status.FAIL,
-                     f"uv venv --prompt myenv /tmp/testvenv_prompt", out, dur)
+                     f"uv venv --prompt myenv /data/local/tmp/testvenv_prompt", out, dur)
 
         # ── pip 操作 ──
         py = f"--python {venv_python}"
@@ -463,8 +465,8 @@ class TestRunner:
                      f"uv pip uninstall requests {py}", out, dur)
 
         # C9: pip compile
-        req_in = "/tmp/requirements.in"
-        req_txt = "/tmp/requirements.txt"
+        req_in = "/data/local/tmp/requirements.in"
+        req_txt = "/data/local/tmp/requirements.txt"
         run_command(f"echo 'requests' > {req_in}", 10)
         code, out, dur = self.uv(f"pip compile {req_in} -o {req_txt}")
         ok = code == 0
@@ -496,7 +498,7 @@ class TestRunner:
                      f"uv pip install --no-deps idna {py}", out, dur)
 
         # C21: pip install -e (需要先创建 testproj_lib)
-        lib_path = f"/tmp/testproj_lib"
+        lib_path = f"/data/local/tmp/testproj_lib"
         self.uv(f"init --lib {lib_path}")
         code, out, dur = self.uv(f"pip install -e {lib_path} {py}")
         ok = code == 0
@@ -530,7 +532,7 @@ class TestRunner:
                 self.skip_deps(tid, name, "B2 失败，跳过 D 组")
             return
 
-        proj = f"/tmp/testproj"
+        proj = f"/data/local/tmp/testproj"
         p = f"--project {proj}"
 
         # D1: init 项目
@@ -635,14 +637,14 @@ class TestRunner:
                      f"uv sync --frozen {p}", out, dur)
 
         # D9: init --lib
-        lib_path = f"/tmp/testproj_lib"
+        lib_path = f"/data/local/tmp/testproj_lib"
         code, out, dur = self.uv(f"init --lib {lib_path}")
         ok = code == 0
         self.record("D9", "init --lib", Status.PASS if ok else Status.FAIL,
                      f"uv init --lib {lib_path}", out, dur)
 
         # D10: init --script
-        script_path = f"/tmp/test_script.py"
+        script_path = f"/data/local/tmp/test_script.py"
         code, out, dur = self.uv(f"init --script {script_path}")
         ok = code == 0
         self.record("D10", "init --script", Status.PASS if ok else Status.FAIL,
@@ -667,7 +669,7 @@ class TestRunner:
                      f"uv run {p} -m json.tool --help", out, dur)
 
         # D14: init --app
-        app_path = f"/tmp/testproj_app"
+        app_path = f"/data/local/tmp/testproj_app"
         code, out, dur = self.uv(f"init --app {app_path}")
         ok = code == 0
         self.record("D14", "init --app", Status.PASS if ok else Status.FAIL,
@@ -853,8 +855,8 @@ class TestRunner:
                 self.skip_deps(tid, name, "B2 失败，跳过 G 组")
             return
 
-        lib_path = "/tmp/testproj_lib"
-        out_dir = "/tmp/build_out"
+        lib_path = "/data/local/tmp/testproj_lib"
+        out_dir = "/data/local/tmp/build_out"
 
         # 确保 lib 项目存在
         run_command(f"mkdir -p {out_dir}", 10)
@@ -902,7 +904,7 @@ class TestRunner:
     def group_i(self):
         print("\n═══ Group I: Workspace 管理 ═══")
 
-        proj = f"/tmp/testproj"
+        proj = f"/data/local/tmp/testproj"
         p = f"--project {proj}"
 
         if not self.d1_passed:
@@ -976,13 +978,13 @@ class TestRunner:
         # 清理设备临时文件
         print("\n═══ 清理临时文件 ═══")
         cleanup_paths = [
-            f"/tmp/testvenv", f"/tmp/testvenv_seed",
-            f"/tmp/testvenv_py", f"/tmp/testvenv2",
-            f"/tmp/testvenv_sys", f"/tmp/testvenv_prompt",
-            f"/tmp/testproj", f"/tmp/testproj_lib",
-            f"/tmp/testproj_app", f"/tmp/test_script.py",
-            f"/tmp/requirements.in", f"/tmp/requirements.txt",
-            f"/tmp/build_out",
+            f"/data/local/tmp/testvenv", f"/data/local/tmp/testvenv_seed",
+            f"/data/local/tmp/testvenv_py", f"/data/local/tmp/testvenv2",
+            f"/data/local/tmp/testvenv_sys", f"/data/local/tmp/testvenv_prompt",
+            f"/data/local/tmp/testproj", f"/data/local/tmp/testproj_lib",
+            f"/data/local/tmp/testproj_app", f"/data/local/tmp/test_script.py",
+            f"/data/local/tmp/requirements.in", f"/data/local/tmp/requirements.txt",
+            f"/data/local/tmp/build_out",
         ]
         for path in cleanup_paths:
             run_command(f"rm -rf {path}", 10)
