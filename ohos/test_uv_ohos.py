@@ -637,7 +637,11 @@ class TestRunner:
                      f"uv sync --frozen {p}", out, dur)
 
         # D9: init --lib
+        # 注意：C21 已在 testproj_lib 建过 lib 项目；0.11.31 的 `uv init` 拒绝在已含
+        # pyproject.toml 的目录重复初始化（旧版 uv 容忍，故 sb-fy-sb 未暴露）。
+        # 先清空，确保 init --lib 被真正测到（C22 已用完，G 组会按需重建）。
         lib_path = f"/data/local/tmp/testproj_lib"
+        run_command(f"rm -rf {lib_path}", 10)
         code, out, dur = self.uv(f"init --lib {lib_path}")
         ok = code == 0
         self.record("D9", "init --lib", Status.PASS if ok else Status.FAIL,
