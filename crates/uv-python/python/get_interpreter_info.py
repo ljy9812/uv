@@ -456,9 +456,11 @@ def get_operating_system_and_architecture():
         )
         sys.exit(0)
 
-    if operating_system == "linux":
+    if operating_system in ("linux", "harmonyos", "ohos"):
+        # OHOS (OpenHarmony) may report "ohos" or "harmonyos" from sysconfig.get_platform()
+        # but is Linux-based with musl libc, so treat it identically to linux.
         # noinspection PyProtectedMember
-        from .packaging._manylinux import _get_glibc_version
+        from .packaging._manylinux import _get_glibc_version, _GLibCVersion
 
         # noinspection PyProtectedMember
         from .packaging._musllinux import _get_musl_version
@@ -472,7 +474,8 @@ def get_operating_system_and_architecture():
                 architecture = "armv8l"
 
         musl_version = _get_musl_version(sys.executable)
-        glibc_version = _get_glibc_version()
+        # Skip glibc check if musl is detected to avoid unnecessary overhead
+        glibc_version = _GLibCVersion(-1, -1) if musl_version else _get_glibc_version()
 
         if musl_version:
             operating_system = {
