@@ -154,6 +154,7 @@ impl From<&uv_platform_tags::Os> for Libc {
 fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
     // On OHOS (HarmonyOS), standard ld paths may not exist. Check for OHOS musl
     // version files first as a fast path, and again as a fallback below.
+    #[cfg(target_env = "ohos")]
     if let Some(os) = detect_ohos_musl_version() {
         return Ok(os);
     }
@@ -273,6 +274,7 @@ fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<LibcVersion, LibcDet
 
     // OHOS ships a modified musl that may not print version info when the loader
     // is invoked directly. The version is stored in well-known text files instead.
+    #[cfg(target_env = "ohos")]
     if let Some(os) = detect_ohos_musl_version() {
         return Ok(os);
     }
@@ -286,6 +288,7 @@ fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<LibcVersion, LibcDet
 ///
 /// OHOS ships a modified musl libc that stores the version in a text file rather
 /// than embedding it in the loader's output.
+#[cfg(target_env = "ohos")]
 fn detect_ohos_musl_version() -> Option<LibcVersion> {
     let version_files = [
         "/system/etc/MUSL/generic/version.txt",
