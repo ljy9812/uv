@@ -236,7 +236,11 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 ///
 /// `AlreadyExists` is handled by removing the existing entry before copying,
 /// so this is safe to call when re-creating a venv.
-#[cfg(unix)]
+///
+/// Only compiled on OHOS (the sole caller) and in test builds so the symlink
+/// fallback logic stays unit-tested on ordinary Unix CI. Matches the
+/// `cfg(any(..., test))` pattern used in `uv-torch/src/accelerator.rs`.
+#[cfg(all(unix, any(target_env = "ohos", test)))]
 pub fn replace_symlink_or_copy(
     src: impl AsRef<Path>,
     dst: impl AsRef<Path>,

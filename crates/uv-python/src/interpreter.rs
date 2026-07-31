@@ -476,9 +476,10 @@ impl Interpreter {
     }
 
     fn python_command_impl<C: From<std::process::Command>>(interpreter: &Path) -> C {
-        // On OHOS, python-build-standalone ships Python as an ELF shared object;
-        // we invoke it directly (the musl dynamic linker cannot be run from the
-        // sandbox). The binary must be code-signed separately.
+        // Centralizes how Python subprocesses are launched so any future
+        // platform-specific invocation logic (e.g. signing, env injection) can
+        // be adjusted in a single place. Currently equivalent to
+        // `Command::new(interpreter)`.
         std::process::Command::new(interpreter).into()
     }
 
