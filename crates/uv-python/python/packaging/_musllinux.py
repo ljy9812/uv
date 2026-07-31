@@ -64,7 +64,7 @@ def _get_musl_version(executable: str) -> "_MuslVersion | None":
     # be used to distinguish it.
     import sysconfig
 
-    if sysconfig.get_platform().startswith(("ohos", "harmonyos")):
+    if sysconfig.get_platform().startswith("harmonyos"):
         # Fallback 1: read version from well-known version files.
         # OHOS (HarmonyOS) ships a modified musl that stores the version in a
         # text file rather than embedding it in the loader binary.
