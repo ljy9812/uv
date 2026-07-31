@@ -1,0 +1,146 @@
+============================================================
+  OHOS uv 已支持指令列表
+  基于测试设计文档 v4.0 (2026-06-02)
+  总计 107 个用例，通过 106 个，通过率 99.1%
+============================================================
+
+【A. 基础命令】 18/19 通过
+  ✅ uv --version
+  ✅ uv --help
+  ✅ uv pip --help
+  ✅ uv python --help
+  ✅ uv tool --help
+  ✅ uv cache --help
+  ✅ uv venv --help
+  ✅ uv build --help
+  ✅ uv self --help
+  ✅ uv workspace --help
+  ✅ uv auth --help
+  ✅ uv cache dir
+  ✅ uv cache size
+  ✅ uv tool dir
+  ✅ uv python dir
+  ✅ uv pip debug
+  ✅ uv auth dir
+  ✅ uv self version
+  ❌ uv self update --dry-run               ← 不支持外部部署的自更新
+
+【B. Python 管理】 9/9 全部通过
+  ✅ uv python list
+  ✅ uv python install 3.12
+  ✅ uv python find
+  ✅ uv python pin 3.12
+  ✅ uv python list --only-installed
+  ✅ uv python list --all-versions
+  ✅ uv python list --only-installed --output-format json
+  ✅ uv python install --reinstall 3.12
+  ✅ uv python uninstall 3.12
+
+【C. 虚拟环境 + pip】 27/27 全部通过
+
+  [venv 虚拟环境 9/9]
+  ✅ uv venv <path>
+  ✅ uv venv --seed <path>
+  ✅ uv pip list --python <venv-python>
+  ✅ uv venv --python 3.12 <path>
+  ✅ uv venv --clear <path>
+  ✅ uv venv --allow-existing <path>
+  ✅ uv venv --no-project <path>
+  ✅ uv venv --system-site-packages <path>
+  ✅ uv venv --prompt <name> <path>
+
+  [pip 操作 18/18]
+  ✅ uv pip install <package> --python <venv-python>
+  ✅ uv pip list --python <venv-python>
+  ✅ uv pip list --format json --python <venv-python>
+  ✅ uv pip show <package> --python <venv-python>
+  ✅ uv pip freeze --python <venv-python>
+  ✅ uv pip check --python <venv-python>
+  ✅ uv pip tree --python <venv-python>
+  ✅ uv pip list --outdated --python <venv-python>
+  ✅ uv pip uninstall <package> --python <venv-python>
+  ✅ uv pip compile requirements.in -o requirements.txt
+  ✅ uv pip sync requirements.txt --python <venv-python>
+  ✅ uv pip install -r requirements.txt --python <venv-python>
+  ✅ uv pip install --upgrade <package> --python <venv-python>
+  ✅ uv pip install --no-deps <package> --python <venv-python>
+  ✅ uv pip install -e <path> --python <venv-python>
+  ✅ uv pip uninstall -r requirements.txt --python <venv-python>
+
+【D. 项目管理】 28/28 全部通过
+  ✅ uv init <path>
+  ✅ uv lock --project <path>
+  ✅ uv sync --project <path>
+  ✅ uv add <package> --project <path>
+  ✅ uv tree --project <path>
+  ✅ uv version --project <path>
+  ✅ uv add --dev <package> --project <path>
+  ✅ uv remove --dev <package> --project <path>
+  ✅ uv remove <package> --project <path>
+  ✅ uv run --project <path> python -c "..."
+  ✅ uv export --project <path>
+  ✅ uv run --with <package> --project <path> python -c "..."
+  ✅ uv lock --upgrade --project <path>
+  ✅ uv sync --frozen --project <path>
+  ✅ uv init --lib <path>
+  ✅ uv init --script <path>
+  ✅ uv add --script <script.py> <package>
+  ✅ uv run <script.py>
+  ✅ uv run --project <path> -m <module>
+  ✅ uv init --app <path>
+  ✅ uv add --optional <group> <package> --project <path>
+  ✅ uv add --group <group> <package> --project <path>
+  ✅ uv add --editable <path> --project <path>
+  ✅ uv sync --no-dev --project <path>
+  ✅ uv export --format pylock.toml --project <path>
+  ✅ uv export --format cyclonedx1.5 --project <path>
+  ✅ uv format --project <path>
+  ✅ uv add --raw <package> --project <path>
+
+【E. Tool 管理】 12/12 全部通过
+  ✅ uv tool install <package>
+  ✅ uv tool list
+  ✅ uv tool run <tool> --version
+  ✅ uv tool uninstall <tool>
+  ✅ uv tool upgrade <tool>
+  ✅ uv tool dir --bin
+  ✅ uv tool run <tool>@<version> --version
+  ✅ uv tool install --from <package> <tool>
+  ✅ uv tool upgrade --all
+  ✅ uv tool list --show-paths
+
+【F. Cache 管理】 2/2 全部通过
+  ✅ uv cache prune
+  ✅ uv cache clean
+
+【G. Build】 3/3 全部通过
+  ✅ uv build --sdist <path> --out-dir <dir>
+  ✅ uv build --wheel <path> --out-dir <dir>
+  ✅ uv build <path> --out-dir <dir>
+
+【H. Auth 管理】 3/3 全部通过
+  ✅ uv auth login --help
+  ✅ uv auth logout --help
+  ✅ uv auth token --help
+
+【I. Workspace 管理】 3/3 全部通过
+  ✅ uv workspace dir --project <path>
+  ✅ uv workspace list --project <path>
+  ✅ uv workspace metadata --frozen --project <path>
+
+【J. Publish】 1/1 全部通过
+  ✅ uv publish --help
+
+============================================================
+  未支持指令汇总（1 个失败）
+============================================================
+
+1. uv self update --dry-run
+   原因：uv 通过外部方式部署到 OHOS，不支持自更新
+
+============================================================
+  统计
+============================================================
+  已通过：106 条
+  未通过：  1 条（A11）
+  通过率：99.1%
