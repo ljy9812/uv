@@ -250,7 +250,7 @@ pub fn replace_symlink_or_copy(
             // Symlink unavailable (denied, or dst exists on a no-symlink fs).
             // Remove any existing entry (symlink or file) and copy the source.
             let _ = fs_err::remove_file(dst);
-            fs_err::copy(src, dst)
+            fs_err::copy(src, dst).map(|_| ())
         }
         Err(err) => Err(err),
     }
