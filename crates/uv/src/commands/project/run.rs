@@ -1712,7 +1712,8 @@ impl RunCommand {
     fn as_command(&self, interpreter: &Interpreter) -> Command {
         match self {
             Self::Python(args) => {
-                let mut process = Command::new(interpreter.sys_executable());
+                let mut process =
+                    uv_python::Interpreter::python_command_tokio(interpreter.sys_executable());
                 process.args(args);
                 process
             }
@@ -1727,26 +1728,30 @@ impl RunCommand {
                     process
                 // Otherwise, invoke `python <module>`
                 } else {
-                    let mut process = Command::new(interpreter.sys_executable());
+                    let mut process =
+                        uv_python::Interpreter::python_command_tokio(interpreter.sys_executable());
                     process.arg(path);
                     process.args(args);
                     process
                 }
             }
             Self::PythonScript(target, args) | Self::PythonZipapp(target, args) => {
-                let mut process = Command::new(interpreter.sys_executable());
+                let mut process =
+                    uv_python::Interpreter::python_command_tokio(interpreter.sys_executable());
                 process.arg(target);
                 process.args(args);
                 process
             }
             Self::PythonRemote(downloaded_script, args) => {
-                let mut process = Command::new(interpreter.sys_executable());
+                let mut process =
+                    uv_python::Interpreter::python_command_tokio(interpreter.sys_executable());
                 process.arg(downloaded_script.path());
                 process.args(args);
                 process
             }
             Self::PythonModule(module, args) => {
-                let mut process = Command::new(interpreter.sys_executable());
+                let mut process =
+                    uv_python::Interpreter::python_command_tokio(interpreter.sys_executable());
                 process.arg("-m");
                 process.arg(module);
                 process.args(args);
@@ -1772,7 +1777,8 @@ impl RunCommand {
                 process
             }
             Self::PythonStdin(script, args) => {
-                let mut process = Command::new(interpreter.sys_executable());
+                let mut process =
+                    uv_python::Interpreter::python_command_tokio(interpreter.sys_executable());
                 process.arg("-c");
 
                 cfg_select! {
@@ -1829,7 +1835,9 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::Empty => Command::new(interpreter.sys_executable()),
+            Self::Empty => {
+                uv_python::Interpreter::python_command_tokio(interpreter.sys_executable())
+            }
         }
     }
 
