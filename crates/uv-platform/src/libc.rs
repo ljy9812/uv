@@ -152,6 +152,13 @@ impl From<&uv_platform_tags::Os> for Libc {
 /// A platform can have both musl and glibc installed. We determine the preferred platform by
 /// inspecting core binaries.
 fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
+    // On OHOS (HarmonyOS), standard ld paths may not exist. Check for OHOS musl
+    // version files first as a fast path, and again as a fallback below.
+    #[cfg(target_env = "ohos")]
+    if let Some(os) = detect_ohos_musl_version() {
+        return Ok(os);
+    }
+
     let ld_path = find_ld_path()?;
     trace!("Found `ld` path: {}", ld_path.user_display());
 
@@ -264,9 +271,45 @@ fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<LibcVersion, LibcDet
     if let Some(os) = musl_ld_output_to_version("stderr", &output.stderr) {
         return Ok(os);
     }
+
+    // OHOS ships a modified musl that may not print version info when the loader
+    // is invoked directly. The version is stored in well-known text files instead.
+    #[cfg(target_env = "ohos")]
+    if let Some(os) = detect_ohos_musl_version() {
+        return Ok(os);
+    }
+
     Err(LibcDetectionError::InvalidLdSoOutputMusl(
         ld_path.to_path_buf(),
     ))
+}
+
+/// Read the musl version from OHOS (HarmonyOS) version text files.
+///
+/// OHOS ships a modified musl libc that stores the version in a text file rather
+/// than embedding it in the loader's output.
+#[cfg(target_env = "ohos")]
+fn detect_ohos_musl_version() -> Option<LibcVersion> {
+    let version_files = [
+        "/system/etc/MUSL/generic/version.txt",
+        "/data/service/el0/public/for-all-app/musl_namespace_config/version.txt",
+    ];
+    for path in &version_files {
+        if let Ok(content) = fs::read_to_string(path) {
+            let content = content.trim();
+            if let Some((_, [major, minor])) = regex!(r"(\d{1,4})\.(\d{1,4})")
+                .captures(content)
+                .map(|c| c.extract())
+            {
+                // unwrap-safety: 1-4 ASCII digits, max 9999, fits in a u16.
+                let major = major.parse().expect("valid major version");
+                let minor = minor.parse().expect("valid minor version");
+                trace!("Found OHOS musl version {major}.{minor} from {path}");
+                return Some(LibcVersion::Musllinux { major, minor });
+            }
+        }
+    }
+    None
 }
 
 /// Parse the musl version from ld output.
