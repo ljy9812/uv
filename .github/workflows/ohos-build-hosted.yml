@@ -76,13 +76,15 @@ jobs:
           $sdk = $env:OHOS_SDK
           $zip = "$env:RUNNER_TEMP\ohos-native.zip"
           Write-Host "=== Downloading OHOS SDK (877 MB) via curl ==="
-          # curl is more reliable than Invoke-WebRequest for large files:
-          # --fail to error on HTTP 4xx/5xx, --retry for transient failures,
-          # --connect-timeout/--max-time to avoid hanging, -L to follow redirects.
-          # Auth header avoids rate limits on the Release asset.
-          $auth = "-H", "Authorization: Bearer $env:GITHUB_TOKEN"
-          & curl -L --fail --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 1200 `
-            @auth -o $zip $env:OHOS_SDK_ZIP_URL
+          # Use curl.exe explicitly — in PowerShell, `curl` is an alias for
+          # Invoke-WebRequest (which hung on this 877MB asset). curl.exe is the
+          # real curl, preinstalled on GitHub-hosted Windows runners.
+          # --fail errors on HTTP 4xx/5xx, --retry for transient failures,
+          # --connect-timeout/--max-time avoid hanging, -L follows redirects.
+          & curl.exe -L --fail --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 1200 `
+            -H "Authorization: Bearer $env:GITHUB_TOKEN" `
+            -H "Accept: application/octet-stream" `
+            -o $zip $env:OHOS_SDK_ZIP_URL
           if ($LASTEXITCODE -ne 0) { throw "curl download failed with exit code $LASTEXITCODE" }
           $sizeMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
           Write-Host "Downloaded: $sizeMB MB"
