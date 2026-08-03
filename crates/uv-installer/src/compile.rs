@@ -8,7 +8,7 @@ use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::oneshot;
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
@@ -414,7 +414,7 @@ async fn launch_bytecode_compiler(
     CompileError,
 > {
     // We input the paths through stdin and get the successful paths returned through stdout.
-    let mut bytecode_compiler = uv_python::Interpreter::python_command_tokio(interpreter)
+    let mut bytecode_compiler = Command::new(interpreter)
         .arg(pip_compileall_py)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

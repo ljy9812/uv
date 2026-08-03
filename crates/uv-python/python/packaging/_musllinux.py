@@ -47,27 +47,28 @@ def _get_musl_version(executable: str) -> "_MuslVersion | None":
         return None
     if ld is None or "musl" not in ld:
         return None
-    # Try invoking the loader directly first
-    try:
-        proc = subprocess.run(
-            [ld], stderr=subprocess.PIPE, text=True, timeout=5
-        )
-        version = _parse_musl_version(proc.stderr)
-        if version is not None:
-            return version
-    except (OSError, PermissionError, subprocess.TimeoutExpired):
-        pass
-    # OHOS-specific fallbacks (version files / loader binary scan / default
-    # 1.2). Scoped to OHOS so non-OHOS musl hosts keep upstream behavior
-    # (loader failure -> None). OHOS reports sysconfig.get_platform()
-    # starting with "harmonyos"; sys.platform is "linux" on OHOS and cannot
-    # be used to distinguish it.
+    # OHOS (HarmonyOS) ships a modified musl whose loader cannot be invoked
+    # directly from the sandbox and may not print version info. Scope the
+    # timeout + fallback chain to OHOS so non-OHOS musl hosts keep upstream
+    # behavior verbatim. OHOS reports sysconfig.get_platform() starting with
+    # "harmonyos"; sys.platform is "linux" on OHOS and cannot distinguish it.
     import sysconfig
 
     if sysconfig.get_platform().startswith("harmonyos"):
+        # Try invoking the loader directly first (with a timeout; the OHOS
+        # sandbox may hang or deny the invocation).
+        try:
+            proc = subprocess.run(
+                [ld], stderr=subprocess.PIPE, text=True, timeout=5
+            )
+            version = _parse_musl_version(proc.stderr)
+            if version is not None:
+                return version
+        except (OSError, PermissionError, subprocess.TimeoutExpired):
+            pass
         # Fallback 1: read version from well-known version files.
-        # OHOS (HarmonyOS) ships a modified musl that stores the version in a
-        # text file rather than embedding it in the loader binary.
+        # OHOS stores the musl version in a text file rather than embedding
+        # it in the loader binary.
         for version_file in (
             "/system/etc/MUSL/generic/version.txt",
             "/data/service/el0/public/for-all-app/musl_namespace_config/version.txt",
@@ -98,7 +99,9 @@ def _get_musl_version(executable: str) -> "_MuslVersion | None":
         # Last resort: confirmed musl-linked but unknown version.
         # Default to 1.2 which covers all modern musl builds.
         return _MuslVersion(major=1, minor=2)
-    return None
+    # Non-OHOS: upstream behavior verbatim (no timeout, no try/except).
+    proc = subprocess.run([ld], stderr=subprocess.PIPE, text=True)
+    return _parse_musl_version(proc.stderr)
 
 
 def platform_tags(archs: Sequence[str]) -> Iterator[str]:
