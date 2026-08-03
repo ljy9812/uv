@@ -270,7 +270,7 @@ pub(crate) fn create(
     fs_err::create_dir_all(&scripts)?;
     let executable = scripts.join(format!("python{EXE_SUFFIX}"));
 
-    #[cfg(all(unix, not(target_env = "ohos")))]
+    #[cfg(unix)]
     {
         uv_fs::replace_symlink(&executable_target, &executable)?;
         uv_fs::replace_symlink(
@@ -306,40 +306,6 @@ pub(crate) fn create(
 
         if interpreter.markers().implementation_name() == "graalpy" {
             uv_fs::replace_symlink("python", scripts.join("graalpy"))?;
-        }
-    }
-
-    // On OHOS, some filesystems/SELinux domains deny the `symlink` syscall.
-    // Fall back to copying the interpreter binary to each name (copy-mode
-    // venv; `pyvenv.cfg`'s `home=` points at the original interpreter, so
-    // CPython still locates its stdlib).
-    #[cfg(target_env = "ohos")]
-    {
-        let mut targets = vec![
-            executable.clone(),
-            scripts.join(format!("python{}", interpreter.python_major())),
-            scripts.join(format!(
-                "python{}.{}",
-                interpreter.python_major(),
-                interpreter.python_minor(),
-            )),
-        ];
-        if interpreter.gil_disabled() {
-            targets.push(scripts.join(format!(
-                "python{}.{}t",
-                interpreter.python_major(),
-                interpreter.python_minor(),
-            )));
-        }
-        if interpreter.markers().implementation_name() == "pypy" {
-            targets.push(scripts.join(format!("pypy{}", interpreter.python_major())));
-            targets.push(scripts.join("pypy"));
-        }
-        if interpreter.markers().implementation_name() == "graalpy" {
-            targets.push(scripts.join("graalpy"));
-        }
-        for dst in targets {
-            uv_fs::replace_symlink_or_copy(&executable_target, &dst, true)?;
         }
     }
 
@@ -626,15 +592,6 @@ pub(crate) fn create(
         match fs_err::os::unix::fs::symlink("lib", location.join("lib64")) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-            // On OHOS, symlink may be denied on restricted filesystems; lib64
-            // is optional (multilib), so warn and continue instead of failing.
-            #[cfg(target_env = "ohos")]
-            Err(err)
-                if err.kind() == io::ErrorKind::PermissionDenied
-                    || err.raw_os_error().is_some_and(|c| c == 1 || c == 13) =>
-            {
-                tracing::warn!("failed to symlink lib64 -> lib: {err}; skipping (OHOS)");
-            }
             Err(err) => {
                 return Err(err.into());
             }
