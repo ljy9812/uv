@@ -175,17 +175,20 @@ struct Pep517Backend {
     backend_path: Option<BackendPath>,
 }
 
-/// Platform compatibility stub for OHOS (OpenHarmony).
+/// Normalize `sysconfig.get_platform()` for build backends.
 ///
-/// On OHOS, `sysconfig.get_platform()` returns an identifier containing
-/// `"harmonyos"`, which build backends like setuptools do not recognise. This
-/// stub monkey-patches it to return `"linux"` instead. A no-op on non-OHOS.
-#[cfg(target_env = "ohos")]
+/// On OHOS (OpenHarmony), `sysconfig.get_platform()` returns an identifier
+/// containing `"harmonyos"`, which build backends like setuptools do not
+/// recognise. This stub wraps the original call so that only `harmonyos`
+/// platforms are rewritten to `linux`; every other platform is returned
+/// verbatim. The check runs in the build subprocess at Python runtime, so the
+/// same stub is compiled into every target and is a no-op on non-OHOS.
 const OHOS_PLATFORM_STUB: &str = "\
 import sysconfig as _sysconfig
 _orig_get_platform = _sysconfig.get_platform
 def _patched_get_platform():
-    return _orig_get_platform().replace('harmonyos', 'linux')
+    p = _orig_get_platform()
+    return p.replace('harmonyos', 'linux') if p.startswith('harmonyos') else p
 _sysconfig.get_platform = _patched_get_platform
 try:
     import distutils.util
@@ -193,9 +196,6 @@ try:
 except (ImportError, ModuleNotFoundError):
     pass
 ";
-
-#[cfg(not(target_env = "ohos"))]
-const OHOS_PLATFORM_STUB: &str = "";
 
 impl Pep517Backend {
     fn backend_import(&self) -> String {
