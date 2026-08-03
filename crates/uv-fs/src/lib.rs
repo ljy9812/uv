@@ -225,41 +225,6 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
     }
 }
 
-/// Like [`replace_symlink`], but fall back to copying `src` to `dst` when
-/// creating a symlink is denied (e.g. `EPERM`/`EACCES`) or the destination
-/// already exists on a filesystem that rejects symlinks.
-///
-/// This is used on OHOS, where some filesystems/SELinux domains deny the
-/// `symlink` syscall. Copying the interpreter binary yields a copy-mode
-/// virtualenv (PEP 405); `pyvenv.cfg`'s `home=` already points at the
-/// original interpreter, so CPython still locates its stdlib.
-///
-/// `AlreadyExists` is handled by removing the existing entry before copying,
-/// so this is safe to call when re-creating a venv.
-///
-/// Only compiled on OHOS (the sole caller) and in test builds so the symlink
-/// fallback logic stays unit-tested on ordinary Unix CI. Matches the
-/// `cfg(any(..., test))` pattern used in `uv-torch/src/accelerator.rs`.
-#[cfg(all(unix, any(target_env = "ohos", test)))]
-pub fn replace_symlink_or_copy(
-    src: impl AsRef<Path>,
-    dst: impl AsRef<Path>,
-    allow_copy: bool,
-) -> std::io::Result<()> {
-    let src = src.as_ref();
-    let dst = dst.as_ref();
-    match fs_err::os::unix::fs::symlink(src, dst) {
-        Ok(()) => Ok(()),
-        Err(err) if allow_copy => {
-            // Symlink unavailable (denied, or dst exists on a no-symlink fs).
-            // Remove any existing entry (symlink or file) and copy the source.
-            let _ = fs_err::remove_file(dst);
-            fs_err::copy(src, dst).map(|_| ())
-        }
-        Err(err) => Err(err),
-    }
-}
-
 /// Create a directory link at `dst` pointing to `src`.
 ///
 /// On Windows, this normally creates an NTFS junction, falling back to a Windows
@@ -1015,37 +980,6 @@ mod tests {
 
         assert!(!clear_virtualenv(&environment)?);
         assert!(environment.is_dir());
-        Ok(())
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn replace_symlink_or_copy_creates_symlink_when_allowed() -> io::Result<()> {
-        let tempdir = tempfile::tempdir()?;
-        let src = tempdir.path().join("src");
-        fs_err::write(&src, "content")?;
-        let dst = tempdir.path().join("dst");
-
-        // On a normal filesystem symlink succeeds; dst becomes a symlink.
-        replace_symlink_or_copy(&src, &dst, true)?;
-        assert_eq!(fs_err::read_to_string(&dst)?, "content");
-        assert!(fs_err::symlink_metadata(&dst)?.file_type().is_symlink());
-        Ok(())
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn replace_symlink_or_copy_overwrites_existing_with_copy_when_allowed() -> io::Result<()> {
-        let tempdir = tempfile::tempdir()?;
-        let src = tempdir.path().join("src");
-        fs_err::write(&src, "new")?;
-        let dst = tempdir.path().join("dst");
-        fs_err::write(&dst, "old")?;
-
-        // dst already exists -> symlink fails with AlreadyExists -> copy path
-        // removes dst and copies src over it.
-        replace_symlink_or_copy(&src, &dst, true)?;
-        assert_eq!(fs_err::read_to_string(&dst)?, "new");
         Ok(())
     }
 }

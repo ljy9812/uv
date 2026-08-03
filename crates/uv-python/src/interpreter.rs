@@ -460,29 +460,6 @@ impl Interpreter {
         &self.sys_executable
     }
 
-    /// Create a [`std::process::Command`] to run the given Python interpreter path.
-    ///
-    /// Centralizes how Python is launched so OHOS-specific invocation can be
-    /// adjusted in a single place.
-    pub fn python_command(interpreter: &Path) -> std::process::Command {
-        Self::python_command_impl(interpreter)
-    }
-
-    /// Create a [`tokio::process::Command`] to run the given Python interpreter path.
-    ///
-    /// Same as [`python_command`](Self::python_command) but for async contexts.
-    pub fn python_command_tokio(interpreter: &Path) -> tokio::process::Command {
-        Self::python_command_impl(interpreter)
-    }
-
-    fn python_command_impl<C: From<std::process::Command>>(interpreter: &Path) -> C {
-        // Centralizes how Python subprocesses are launched so any future
-        // platform-specific invocation logic (e.g. signing, env injection) can
-        // be adjusted in a single place. Currently equivalent to
-        // `Command::new(interpreter)`.
-        std::process::Command::new(interpreter).into()
-    }
-
     /// Return the recognized native extension module suffixes for this Python interpreter.
     pub fn extension_suffixes(&self) -> &[Box<str>] {
         &self.extension_suffixes
@@ -996,7 +973,7 @@ impl InterpreterInfo {
             r"import sys; sys.path = [{}] + sys.path; from python.get_interpreter_info import main; main()",
             tempdir.path().escape_for_python()
         );
-        let mut command = Interpreter::python_command(interpreter);
+        let mut command = std::process::Command::new(interpreter);
         command
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
